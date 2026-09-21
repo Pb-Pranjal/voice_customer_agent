@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Mic, Search, RotateCcw, UserCheck, Zap, Loader, AlertTriangle } from 'lucide-react'
 import Card from '../components/Card'
+import { apiUrl } from '../config'
 
 const QUICK = [
   { id: 'voice', label: 'Start Voice Session', desc: 'Talk to Maya in real time', icon: Mic },
@@ -17,12 +18,11 @@ export default function Overview({ onNavigate }) {
   const [error, setError] = useState(null)
 
   const loadSummary = async () => {
-    setLoading(true)
-    setError(null)
     try {
-      const response = await fetch('/api/dashboard/summary')
+      const response = await fetch(apiUrl('/api/dashboard/summary'))
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail || 'Could not load dashboard summary.')
+      setError(null)
       setSummary(data)
     } catch (err) {
       setError(err.message)
@@ -31,11 +31,21 @@ export default function Overview({ onNavigate }) {
     }
   }
 
+  const refreshSummary = () => {
+    setLoading(true)
+    void loadSummary()
+  }
+
   useEffect(() => {
-    loadSummary()
-    const onRefresh = () => loadSummary()
+    const initialLoad = window.setTimeout(() => {
+      void loadSummary()
+    }, 0)
+    const onRefresh = refreshSummary
     window.addEventListener('dashboard:refresh', onRefresh)
-    return () => window.removeEventListener('dashboard:refresh', onRefresh)
+    return () => {
+      window.clearTimeout(initialLoad)
+      window.removeEventListener('dashboard:refresh', onRefresh)
+    }
   }, [])
 
   const stats = [
@@ -128,7 +138,7 @@ export default function Overview({ onNavigate }) {
           <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Recent Refund Requests</h2>
           <button
             type="button"
-            onClick={loadSummary}
+            onClick={refreshSummary}
             disabled={loading}
             style={{
               padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)',

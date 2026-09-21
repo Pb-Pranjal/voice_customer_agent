@@ -23,14 +23,16 @@ import aiohttp
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from order_store import (
     ORDER_STORE_LOCK,
     OrderStoreError,
     calculate_expected_refund_date,
+    calculate_remaining_working_days,
     dashboard_summary,
     find_order,
+    is_refund_overdue,
     list_refunds,
     read_orders,
     update_order,
@@ -50,6 +52,11 @@ logger = logging.getLogger("server")
 app = FastAPI(title="Maya Support API")
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
@@ -59,6 +66,11 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        *[
+            origin.strip()
+            for origin in os.environ.get("FRONTEND_ORIGINS", "").split(",")
+            if origin.strip()
+        ],
     ],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -114,11 +126,21 @@ def look_up_order(order_id: str) -> Dict[str, Any]:
     ):
         if field in order:
             result[field] = order[field]
-    result["refund_issued_date"] = result.get("refund_issued_date") or order.get("refund_issued_date")
-    result["expected_refund_date"] = result.get("expected_refund_date") or order.get("expected_refund_date")
-    result["complaint_ticket_id"] = result.get("complaint_ticket_id") or order.get("complaint_ticket_id")
-    result["complaint_status"] = result.get("complaint_status") or order.get("complaint_status")
-    result["overdue"] = bool(order.get("refund_status") and str(order.get("refund_status")).lower() == "overdue")
+    result["remaining_working_days"] = calculate_remaining_working_days(
+        order.get("expected_refund_date")
+    )
+    result["overdue"] = is_refund_overdue(
+        order.get("refund_status"),
+        order.get("expected_refund_date"),
+    )
+    for field in (
+        "complaint_refund_ticket_id",
+        "complaint_amount_inr",
+        "complaint_reason",
+        "complaint_created_date",
+    ):
+        if field in order:
+            result[field] = order[field]
     return result
 
 
@@ -162,9 +184,10 @@ def start_refund(order_id: str, reason: str) -> Dict[str, Any]:
         requested_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         refund_issued_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         ticket_id = f"RF-{order_id}-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-        expected_refund_date = str(
-            __import__('order_store').calculate_expected_refund_date(refund_issued_date, 7)
-        )[:10]
+        expected_refund_date = calculate_expected_refund_date(
+            refund_issued_date,
+            7,
+        )
         try:
             updated_order = update_order(
                 order_id,
@@ -234,10 +257,14 @@ def get_refund_timeline(order_id: str) -> Dict[str, Any]:
         "refund_status": refund_status,
         "refund_issued_date": issued_date,
         "expected_refund_date": expected_date,
-        "remaining_working_days": max(0, (datetime.strptime(str(expected_date), "%Y-%m-%d").date() - datetime.utcnow().date()).days),
-        "overdue": refund_status in {"requested", "pending", "processing", "overdue"} and datetime.utcnow().date() > datetime.strptime(str(expected_date), "%Y-%m-%d").date(),
+        "remaining_working_days": calculate_remaining_working_days(expected_date),
+        "overdue": is_refund_overdue(refund_status, expected_date),
         "complaint_ticket_id": complaint_ticket,
         "complaint_status": complaint_status,
+        "complaint_refund_ticket_id": order.get("complaint_refund_ticket_id"),
+        "complaint_amount_inr": order.get("complaint_amount_inr"),
+        "complaint_reason": order.get("complaint_reason"),
+        "complaint_created_date": order.get("complaint_created_date"),
     }
 
 
@@ -274,8 +301,8 @@ async def get_order(order_id: str):
 
 
 class RefundRequest(BaseModel):
-    order_id: str
-    reason: str
+    order_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
 
 
 @app.post("/api/refund")
@@ -305,7 +332,7 @@ async def get_dashboard_summary():
 
 
 class EscalateRequest(BaseModel):
-    summary: str
+    summary: str = Field(min_length=1)
 
 
 @app.post("/api/escalate")

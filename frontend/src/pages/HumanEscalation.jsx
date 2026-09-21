@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { UserCheck, Clock, Ticket, Loader } from 'lucide-react'
 import Card from '../components/Card'
 import StatusBadge from '../components/StatusBadge'
+import { apiUrl } from '../config'
 
 export default function HumanEscalation() {
   const [summary, setSummary] = useState('')
@@ -16,7 +17,7 @@ export default function HumanEscalation() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch('/api/escalate', {
+      const res = await fetch(apiUrl('/api/escalate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ summary: summary.trim() }),

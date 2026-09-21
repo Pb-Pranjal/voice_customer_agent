@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { WS_BASE_URL } from '../config'
 
 export const STATES = {
   IDLE: 'idle',
@@ -134,8 +135,7 @@ export function useVoice() {
     setError(null)
     setVoiceState(STATES.CONNECTING)
 
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws/voice`)
+    const ws = new WebSocket(`${WS_BASE_URL}/ws/voice`)
     wsRef.current = ws
 
     ws.onopen = async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RotateCcw, AlertTriangle, CheckCircle, Loader, RefreshCw } from 'lucide-react'
 import Card from '../components/Card'
+import { apiUrl } from '../config'
 
 const REASONS = [
   'Item arrived damaged',
@@ -24,7 +25,7 @@ export default function RefundRequest() {
 
   const loadRefunds = async () => {
     try {
-      const res = await fetch('/api/refunds')
+      const res = await fetch(apiUrl('/api/refunds'))
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Could not load refund requests.')
       setRefunds(data.refunds || [])
@@ -37,7 +38,7 @@ export default function RefundRequest() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/refunds')
+    fetch(apiUrl('/api/refunds'))
       .then(async res => {
         const data = await res.json()
         if (!res.ok) throw new Error(data.detail || 'Could not load refund requests.')
@@ -70,7 +71,7 @@ export default function RefundRequest() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch('/api/refund', {
+      const res = await fetch(apiUrl('/api/refund'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id: orderId.trim(), reason }),

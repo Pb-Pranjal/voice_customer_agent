@@ -54,8 +54,16 @@ def _format_datetime_utc(value: Any) -> str | None:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def calculate_working_days(start_date: str | datetime | None, working_days: int = DEFAULT_REFUND_WORKING_DAYS) -> datetime:
-    """Return the date after N working days, excluding weekends."""
+def calculate_working_days(
+    start_date: str | datetime | None,
+    working_days: int = DEFAULT_REFUND_WORKING_DAYS,
+) -> datetime:
+    """Return the date after N working days, excluding weekends.
+
+    The issue date is day zero. Counting begins on the next calendar date, so
+    a refund issued on Friday reaches seven working days on the following
+    Monday after the intervening weekdays have been counted.
+    """
     if working_days < 0:
         working_days = 0
     if not isinstance(working_days, int):
@@ -74,11 +82,57 @@ def calculate_working_days(start_date: str | datetime | None, working_days: int 
     return datetime.combine(current, datetime.min.time(), tzinfo=timezone.utc)
 
 
+def count_working_days(
+    start_date: str | datetime | None,
+    end_date: str | datetime | None,
+) -> int:
+    """Count working days after start_date through end_date, inclusively."""
+    start = _coerce_datetime(start_date)
+    end = _coerce_datetime(end_date)
+    if not start or not end or end.date() <= start.date():
+        return 0
+
+    current = start.date() + timedelta(days=1)
+    total = 0
+    while current <= end.date():
+        if current.weekday() < 5:
+            total += 1
+        current += timedelta(days=1)
+    return total
+
+
 def calculate_expected_refund_date(issued_date: str | datetime | None, working_days: int = DEFAULT_REFUND_WORKING_DAYS) -> str:
     """Return the expected refund completion date using working days only."""
     issued = _coerce_datetime(issued_date) or datetime.now(timezone.utc)
     expected = calculate_working_days(issued, working_days)
     return expected.date().isoformat()
+
+
+def calculate_remaining_working_days(
+    expected_date: str | datetime | None,
+    today: str | datetime | None = None,
+) -> int:
+    """Return working days remaining before an expected refund date."""
+    current = _coerce_datetime(today) or datetime.now(timezone.utc)
+    expected = _coerce_datetime(expected_date)
+    if not expected or expected.date() <= current.date():
+        return 0
+    return count_working_days(current, expected)
+
+
+def is_refund_overdue(
+    refund_status: str | None,
+    expected_date: str | datetime | None,
+    today: str | datetime | None = None,
+) -> bool:
+    """Return true only for active refunds past their expected date."""
+    status = str(refund_status or "").strip().lower()
+    if status not in {"requested", "pending", "processing", "overdue"}:
+        return False
+
+    expected = _coerce_datetime(expected_date)
+    current = _coerce_datetime(today) or datetime.now(timezone.utc)
+    return bool(expected and current.date() > expected.date())
 
 
 def _refund_status(order: Dict[str, Any]) -> str:
@@ -105,9 +159,10 @@ def _ensure_refund_tracking(order_id: str, order: Dict[str, Any]) -> Dict[str, A
         expected_date = calculate_expected_refund_date(issued_dt)
         updated["expected_refund_date"] = expected_date
 
-    issue_date = _coerce_datetime(updated.get("refund_issued_date")) or issued_dt
-    expected_dt = datetime.fromisoformat(expected_date + "T00:00:00+00:00")
-    has_expired = refund_status in {"requested", "pending", "processing"} and datetime.now(timezone.utc).date() > expected_dt.date()
+    has_expired = is_refund_overdue(
+        refund_status,
+        expected_date,
+    )
 
     if has_expired and refund_status not in {"failed", "completed", "overdue"}:
         updated["refund_status"] = "overdue"
@@ -229,10 +284,7 @@ def list_refunds() -> list[Dict[str, Any]]:
             remaining = 0
             expected_raw = order.get("expected_refund_date")
             if expected_raw:
-                expected_dt = datetime.fromisoformat(str(expected_raw) + "T00:00:00+00:00")
-                today = datetime.now(timezone.utc)
-                if refund_status in {"requested", "pending", "processing", "overdue"}:
-                    remaining = max(0, (expected_dt.date() - today.date()).days)
+                remaining = calculate_remaining_working_days(expected_raw)
             refunds.append({
                 "ticket_id": order.get("refund_ticket_id"),
                 "order_id": order_id,

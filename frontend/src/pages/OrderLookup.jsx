@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, Package, Loader } from 'lucide-react'
 import Card from '../components/Card'
 import StatusBadge from '../components/StatusBadge'
+import { apiUrl } from '../config'
 
 export default function OrderLookup() {
   const [orderId, setOrderId] = useState('')
@@ -17,7 +18,7 @@ export default function OrderLookup() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(id)}`)
+      const res = await fetch(apiUrl(`/api/orders/${encodeURIComponent(id)}`))
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Order not found.')
       setResult(data)

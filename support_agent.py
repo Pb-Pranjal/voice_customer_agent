@@ -43,7 +43,14 @@ from azure.ai.voicelive.models import (
     Tool,
     ToolChoiceLiteral,
 )
-from order_store import OrderStoreError, calculate_expected_refund_date, find_order, update_order
+from order_store import (
+    OrderStoreError,
+    calculate_expected_refund_date,
+    calculate_remaining_working_days,
+    find_order,
+    is_refund_overdue,
+    update_order,
+)
 
 load_dotenv()
 
@@ -83,9 +90,24 @@ def look_up_order(args: Dict[str, Any]) -> Dict[str, Any]:
         "refund_ticket_id",
         "refund_amount_inr",
         "refund_requested_at",
+        "refund_issued_date",
+        "expected_refund_date",
+        "complaint_ticket_id",
+        "complaint_refund_ticket_id",
+        "complaint_amount_inr",
+        "complaint_reason",
+        "complaint_status",
+        "complaint_created_date",
     ):
         if field in order:
             result[field] = order[field]
+    result["remaining_working_days"] = calculate_remaining_working_days(
+        order.get("expected_refund_date")
+    )
+    result["overdue"] = is_refund_overdue(
+        order.get("refund_status"),
+        order.get("expected_refund_date"),
+    )
     return result
 
 
@@ -123,6 +145,8 @@ def start_refund(args: Dict[str, Any]) -> Dict[str, Any]:
             "refund_requested_at": requested_at,
             "refund_issued_date": issued_date,
             "expected_refund_date": expected_refund_date,
+            "complaint_ticket_id": None,
+            "complaint_status": None,
             "processing_days": 5,
         })
     except (KeyError, OrderStoreError):
@@ -140,6 +164,8 @@ def start_refund(args: Dict[str, Any]) -> Dict[str, Any]:
         "requested_at": requested_at,
         "refund_issued_date": issued_date,
         "expected_refund_date": expected_refund_date,
+        "complaint_ticket_id": None,
+        "complaint_status": None,
     }
 
 
@@ -162,9 +188,14 @@ def get_refund_timeline(args: Dict[str, Any]) -> Dict[str, Any]:
         "refund_status": refund_status,
         "refund_issued_date": issued,
         "expected_refund_date": expected,
+        "remaining_working_days": calculate_remaining_working_days(expected),
         "complaint_ticket_id": order.get("complaint_ticket_id"),
         "complaint_status": order.get("complaint_status"),
-        "overdue": order.get("refund_status", "").lower() in {"requested", "pending", "processing", "overdue"} and datetime.utcnow().date() > datetime.strptime(str(expected), "%Y-%m-%d").date(),
+        "complaint_refund_ticket_id": order.get("complaint_refund_ticket_id"),
+        "complaint_amount_inr": order.get("complaint_amount_inr"),
+        "complaint_reason": order.get("complaint_reason"),
+        "complaint_created_date": order.get("complaint_created_date"),
+        "overdue": is_refund_overdue(refund_status, expected),
     }
 
 

@@ -2,6 +2,5 @@ azure-ai-voicelive>=1.0.0
 aiohttp>=3.9.0
 azure-identity>=1.19.0
 python-dotenv>=1.0.0
-pyaudio>=0.2.14
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0

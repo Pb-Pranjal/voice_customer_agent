@@ -1,5 +1,6 @@
-import { Settings as SettingsIcon, Server, Info } from 'lucide-react'
+import { Server, Info } from 'lucide-react'
 import Card from '../components/Card'
+import { API_BASE_URL, WS_BASE_URL } from '../config'
 
 const DEMO_ORDERS = [
   { id: 'A1001', item: 'Wireless Headphones', status: 'Shipped', total: '₹2,499' },
@@ -22,8 +23,8 @@ export default function SettingsPage() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[
-            { label: 'API Base URL', value: 'http://localhost:8000' },
-            { label: 'Voice WebSocket', value: 'ws://localhost:8000/ws/voice' },
+            { label: 'API Base URL', value: API_BASE_URL || 'Same origin / Vite proxy' },
+            { label: 'Voice WebSocket', value: `${WS_BASE_URL}/ws/voice` },
             { label: 'Azure Credentials', value: 'Configured via server .env (not exposed to browser)' },
           ].map(({ label, value }) => (
             <div key={label} style={{
