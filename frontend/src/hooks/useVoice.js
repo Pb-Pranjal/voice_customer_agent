@@ -112,6 +112,9 @@ export function useVoice() {
         break
       case 'tool_call':
         setToolEvents(prev => [...prev, { ...event, id: Date.now() }])
+        if (event.name === 'start_refund' && event.result?.success) {
+          window.dispatchEvent(new CustomEvent('dashboard:refresh'))
+        }
         break
       case 'response.done':
         setVoiceState(STATES.LISTENING)

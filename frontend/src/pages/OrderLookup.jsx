@@ -106,6 +106,18 @@ export default function OrderLookup() {
               </div>
             ))}
           </div>
+
+          {result.refund_status && (
+            <div style={{ marginTop: 16, padding: 14, borderRadius: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Refund Request</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Status: </span><strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{result.refund_status}</strong></div>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Ticket: </span><strong style={{ color: 'var(--text-primary)' }}>{result.refund_ticket_id}</strong></div>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Reason: </span><strong style={{ color: 'var(--text-primary)' }}>{result.refund_reason}</strong></div>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Amount: </span><strong style={{ color: 'var(--text-primary)' }}>₹{result.refund_amount_inr?.toLocaleString('en-IN')}</strong></div>
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>

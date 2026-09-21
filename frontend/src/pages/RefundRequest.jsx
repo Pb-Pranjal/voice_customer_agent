@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { RotateCcw, AlertTriangle, CheckCircle, Loader } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { RotateCcw, AlertTriangle, CheckCircle, Loader, RefreshCw } from 'lucide-react'
 import Card from '../components/Card'
 
 const REASONS = [
@@ -18,6 +18,45 @@ export default function RefundRequest() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [refunds, setRefunds] = useState([])
+  const [refundsLoading, setRefundsLoading] = useState(true)
+  const [refundsError, setRefundsError] = useState(null)
+
+  const loadRefunds = async () => {
+    try {
+      const res = await fetch('/api/refunds')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Could not load refund requests.')
+      setRefunds(data.refunds || [])
+    } catch (err) {
+      setRefundsError(err.message)
+    } finally {
+      setRefundsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/refunds')
+      .then(async res => {
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.detail || 'Could not load refund requests.')
+        if (!cancelled) setRefunds(data.refunds || [])
+      })
+      .catch(err => {
+        if (!cancelled) setRefundsError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setRefundsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const refreshRefunds = async () => {
+    setRefundsLoading(true)
+    setRefundsError(null)
+    await loadRefunds()
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -41,6 +80,8 @@ export default function RefundRequest() {
       setResult(data)
       setOrderId('')
       setReason('')
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
+      await loadRefunds()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -159,6 +200,55 @@ export default function RefundRequest() {
             </div>
           </div>
         </Card>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 32, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Refund Requests</h2>
+        <button
+          type="button"
+          onClick={refreshRefunds}
+          disabled={refundsLoading}
+          title="Refresh refund requests"
+          style={{ padding: 7, borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex' }}
+        >
+          <RefreshCw size={14} className={refundsLoading ? 'animate-spin-slow' : ''} />
+        </button>
+      </div>
+
+      {refundsError && (
+        <Card style={{ borderColor: 'var(--error)44', background: '#3a1a1a' }}>
+          <p style={{ color: 'var(--error)', fontSize: 13 }}>{refundsError}</p>
+        </Card>
+      )}
+
+      {refundsLoading && !refundsError && (
+        <Card><div style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}><Loader size={14} className="animate-spin-slow" /> Loading refund requests...</div></Card>
+      )}
+
+      {!refundsLoading && !refundsError && refunds.length === 0 && (
+        <Card><p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No refund requests yet.</p></Card>
+      )}
+
+      {!refundsLoading && refunds.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {refunds.map(refund => (
+            <Card key={refund.ticket_id} style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{refund.item}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>Order #{refund.order_id}</div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', textTransform: 'capitalize' }}>{refund.status}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+                <span>Ticket: <strong style={{ color: 'var(--text-primary)' }}>{refund.ticket_id}</strong></span>
+                <span>Amount: <strong style={{ color: 'var(--text-primary)' }}>₹{refund.refund_amount_inr?.toLocaleString('en-IN')}</strong></span>
+                <span>Reason: <strong style={{ color: 'var(--text-primary)' }}>{refund.reason}</strong></span>
+                <span>Requested: <strong style={{ color: 'var(--text-primary)' }}>{refund.requested_at ? new Date(refund.requested_at).toLocaleString() : 'Not available'}</strong></span>
+              </div>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   )

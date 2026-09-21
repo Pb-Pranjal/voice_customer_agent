@@ -1,0 +1,54 @@
+{
+  "A1001": {
+    "item": "Wireless Headphones",
+    "status": "shipped",
+    "carrier": "BlueDart",
+    "eta_days": 2,
+    "total": 2499,
+    "refund_status": "requested",
+    "refund_reason": "Item arrived damaged",
+    "refund_amount_inr": 2499,
+    "refund_ticket_id": "RF-A1001-20260921094625419369",
+    "refund_requested_at": "2026-09-21T04:16:25Z",
+    "processing_days": 5,
+    "refund_issued_date": "2026-09-21T04:16:25Z",
+    "expected_refund_date": "2026-09-30"
+  },
+  "A1002": {
+    "item": "Laptop Stand",
+    "status": "processing",
+    "carrier": null,
+    "eta_days": 5,
+    "total": 1299
+  },
+  "A1003": {
+    "item": "USB-C Cable",
+    "status": "delivered",
+    "carrier": "Delhivery",
+    "eta_days": 0,
+    "total": 349
+  },
+  "A1004": {
+    "item": "Bag",
+    "status": "shipped",
+    "carrier": "BlueDart",
+    "eta_days": 2,
+    "total": 2009,
+    "refund_status": "overdue",
+    "refund_reason": "Item arrived damaged",
+    "refund_amount_inr": 2009,
+    "refund_ticket_id": "RF-A1004-20260910094625419356",
+    "refund_requested_at": "2026-09-21T04:16:25Z",
+    "processing_days": 5,
+    "refund_issued_date": "2026-09-10T04:16:25Z",
+    "expected_refund_date": "2026-09-19",
+    "complaint_ticket_id": "COMP-A1004",
+    "complaint_status": "Open",
+    "complaint_created_date": "2026-09-21T04:29:25Z",
+    "complaint_overdue_date": "2026-09-21",
+    "customer_issue": "Item arrived damaged",
+    "complaint_amount_inr": 2009,
+    "complaint_refund_ticket_id": "RF-A1004-20260910094625419356",
+    "complaint_reason": "Item arrived damaged"
+  }
+}

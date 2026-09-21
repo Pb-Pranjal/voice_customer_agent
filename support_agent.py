@@ -43,6 +43,7 @@ from azure.ai.voicelive.models import (
     Tool,
     ToolChoiceLiteral,
 )
+from order_store import OrderStoreError, calculate_expected_refund_date, find_order, update_order
 
 load_dotenv()
 
@@ -58,26 +59,16 @@ logger.setLevel(logging.INFO)
 # test immediately. Later, swap the bodies for real database or API calls --
 # nothing else in this file has to change.
 
-FAKE_ORDERS = {
-    "A1001": {"item": "Wireless headphones", "status": "shipped",
-              "carrier": "BlueDart", "eta_days": 2, "total": 2499},
-    "A1002": {"item": "Laptop stand", "status": "processing",
-              "carrier": None, "eta_days": 5, "total": 1299},
-    "A1003": {"item": "USB-C cable", "status": "delivered",
-              "carrier": "Delhivery", "eta_days": 0, "total": 349},
-}
-
-
 def look_up_order(args: Dict[str, Any]) -> Dict[str, Any]:
     """Find an order by its ID."""
     order_id = str(args.get("order_id", "")).strip().upper()
-    order = FAKE_ORDERS.get(order_id)
+    order = find_order(order_id)
     if not order:
         return {"found": False,
                 "message": f"No order found with ID {order_id}."}
 
     eta = (datetime.now() + timedelta(days=order["eta_days"])).strftime("%B %d")
-    return {
+    result = {
         "found": True,
         "order_id": order_id,
         "item": order["item"],
@@ -86,13 +77,23 @@ def look_up_order(args: Dict[str, Any]) -> Dict[str, Any]:
         "estimated_delivery": eta if order["status"] != "delivered" else "already delivered",
         "total_inr": order["total"],
     }
+    for field in (
+        "refund_status",
+        "refund_reason",
+        "refund_ticket_id",
+        "refund_amount_inr",
+        "refund_requested_at",
+    ):
+        if field in order:
+            result[field] = order[field]
+    return result
 
 
 def start_refund(args: Dict[str, Any]) -> Dict[str, Any]:
     """Open a refund request for an order."""
     order_id = str(args.get("order_id", "")).strip().upper()
     reason = args.get("reason", "not specified")
-    order = FAKE_ORDERS.get(order_id)
+    order = find_order(order_id)
 
     if not order:
         return {"success": False, "message": f"Order {order_id} does not exist."}
@@ -101,13 +102,69 @@ def start_refund(args: Dict[str, Any]) -> Dict[str, Any]:
                 "message": "This order hasn't shipped yet, so it can be cancelled "
                            "instead of refunded. Offer to cancel it."}
 
+    if order.get("refund_status") in {"requested", "pending", "completed"}:
+        return {
+            "success": False,
+            "duplicate": True,
+            "message": f"A refund has already been requested for {order_id}.",
+            "ticket_id": order.get("refund_ticket_id"),
+        }
+
+    requested_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    issued_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    ticket_id = f"RF-{order_id}-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    expected_refund_date = calculate_expected_refund_date(issued_date, 7)
+    try:
+        update_order(order_id, {
+            "refund_status": "pending",
+            "refund_reason": str(reason).strip(),
+            "refund_amount_inr": order["total"],
+            "refund_ticket_id": ticket_id,
+            "refund_requested_at": requested_at,
+            "refund_issued_date": issued_date,
+            "expected_refund_date": expected_refund_date,
+            "processing_days": 5,
+        })
+    except (KeyError, OrderStoreError):
+        logger.exception("Could not persist refund for order %s", order_id)
+        return {"success": False, "message": "The refund could not be saved."}
+
     return {
         "success": True,
         "order_id": order_id,
         "reason": reason,
         "refund_amount_inr": order["total"],
         "processing_days": 5,
-        "ticket_id": f"RF-{order_id}-{datetime.now().strftime('%H%M')}",
+        "ticket_id": ticket_id,
+        "refund_status": "pending",
+        "requested_at": requested_at,
+        "refund_issued_date": issued_date,
+        "expected_refund_date": expected_refund_date,
+    }
+
+
+def get_refund_timeline(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Return refund timeline details for support responses."""
+    order_id = str(args.get("order_id", "")).strip().upper()
+    order = find_order(order_id)
+    if not order:
+        return {"found": False, "message": f"No order found with ID {order_id}."}
+
+    refund_status = str(order.get("refund_status") or "").lower()
+    if not refund_status:
+        return {"found": True, "order_id": order_id, "refund_status": "not_requested", "message": "No refund request exists for this order."}
+
+    issued = order.get("refund_issued_date") or order.get("refund_requested_at")
+    expected = order.get("expected_refund_date") or calculate_expected_refund_date(issued, 7)
+    return {
+        "found": True,
+        "order_id": order_id,
+        "refund_status": refund_status,
+        "refund_issued_date": issued,
+        "expected_refund_date": expected,
+        "complaint_ticket_id": order.get("complaint_ticket_id"),
+        "complaint_status": order.get("complaint_status"),
+        "overdue": order.get("refund_status", "").lower() in {"requested", "pending", "processing", "overdue"} and datetime.utcnow().date() > datetime.strptime(str(expected), "%Y-%m-%d").date(),
     }
 
 
@@ -127,6 +184,7 @@ def escalate_to_human(args: Dict[str, Any]) -> Dict[str, Any]:
 AVAILABLE_FUNCTIONS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "look_up_order": look_up_order,
     "start_refund": start_refund,
+    "get_refund_timeline": get_refund_timeline,
     "escalate_to_human": escalate_to_human,
 }
 
@@ -174,6 +232,21 @@ TOOLS: list[Tool] = [
                 },
             },
             "required": ["order_id", "reason"],
+        },
+    ),
+    FunctionTool(
+        name="get_refund_timeline",
+        description=(
+            "Read the refund issue date, expected payment date, and complaint ticket info "
+            "for an order. Use this when the customer asks when a refund will reach "
+            "their bank account or if there was a complaint generated."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "The order ID."},
+            },
+            "required": ["order_id"],
         },
     ),
     FunctionTool(
