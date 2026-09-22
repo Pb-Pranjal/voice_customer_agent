@@ -198,13 +198,4 @@ This is a **prototype, not a production support platform**.
 7. Show test/build results.
 8. Discuss limitations and future scope.
 
-## 📄 License
 
-No project license is currently included. Review dependency licenses and add an appropriate license before public distribution.
-
-```
-
-[Download the concise README](sandbox:/mnt/data/README-concise.md)
-
-I kept the wording professional and portfolio/GitHub-oriented rather than preserving the original detailed evaluation-rubric documentation.
-```
