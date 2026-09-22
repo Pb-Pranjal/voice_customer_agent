@@ -4,7 +4,7 @@
 
 Maya is an AI-powered customer support agent for an online electronics store. It combines a React and Vite frontend, a FastAPI backend, Azure AI Foundry Voice Live, REST APIs, and browser WebSocket communication to support order lookup, refund requests, refund tracking, complaint tickets, and human escalation.
 
-**Team members:** Not specified in the repository.
+**Team members:** Pranjal , Damanjeet Singh , Kritindeep , Sania Sodhi
 
 ## 1. Problem Statement
 
